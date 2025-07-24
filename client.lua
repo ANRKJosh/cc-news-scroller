@@ -9,15 +9,15 @@
 ]]
 
 -- --- Configuration ---
-local headlineViewTime = 15      -- Time in seconds to show the headline list
-local articleViewTime = 10       -- Time to show a non-scrolling article
+local headlineViewTime = 10      -- Time in seconds to show the headline list
+local articleViewTime = 20       -- Time to show a non-scrolling article
 local autoScrollSpeed = 2.5      -- Time in seconds between each line scroll
 local scrollEndPause = 5         -- Time to pause at the end of a scrolled article
 local mainTitle = "PoggishTown Times"
-local titleScale = 1.5           -- Scale for the main title (0.5, 1, 1.5, 2, 3, 4, 5)
-local titleHeight = 2            -- Number of lines the title bar takes up (adjust based on scale)
-local headlineScale = 1.0        -- Scale for headline list text
-local articleScale = 1.0         -- Scale for article content text
+local titleScale = 2.5           -- Scale for the main title (0.5, 1, 1.5, 2, 3, 4, 5)
+local titleHeight = 2            -- Number of lines the title bar takes up (adjust based on scale) (default 2)
+local headlineScale = 2        -- Scale for headline list text (default 1)
+local articleScale = 1.5         -- Scale for article content text (default 1)
 local PROTOCOL = "poggish_news"
 local HEARTBEAT_INTERVAL = 35    -- Send heartbeat every 35 seconds
 local ARTICLES_FILE = "client_articles.txt"
@@ -178,82 +178,80 @@ end
 local function drawTitleBar(title, useMainTitle)
     local width, height = monitor.getSize()
     
+    -- Always start with normal scale and black background
+    monitor.setTextScale(1)
+    monitor.setBackgroundColor(colors.black)
+    monitor.setTextColor(colors.white)
+    
     if useMainTitle then
-        -- First, ensure we start with a clean slate
-        monitor.setTextScale(1)
-        monitor.setBackgroundColor(colors.black)
-        
-        -- Draw main title with larger scale and background
-        monitor.setTextScale(titleScale)
+        -- Draw the title bar area with gray background
         monitor.setBackgroundColor(colors.gray)
         monitor.setTextColor(colors.white)
         
-        -- Clear only the title area lines with proper scaling
+        -- Clear the title lines
         for i = 1, titleHeight do
             monitor.setCursorPos(1, i)
             monitor.clearLine()
         end
         
-        -- Calculate title position (accounting for scale)
+        -- Set title scale and draw title
+        monitor.setTextScale(titleScale)
         local scaledWidth = math.floor(width / titleScale)
         local titlePadding = math.max(1, math.floor((scaledWidth - #title) / 2))
         monitor.setCursorPos(titlePadding, 1)
         monitor.write(title)
         
-        -- Connection status (reset to normal scale first)
+        -- Reset to normal scale for status
         monitor.setTextScale(1)
+        monitor.setBackgroundColor(colors.gray)
+        
+        -- Draw connection status
         local statusText = serverConnected and "LIVE" or "OFFLINE"
         local statusColor = serverConnected and colors.green or colors.red
         monitor.setTextColor(statusColor)
-        monitor.setBackgroundColor(colors.gray)
-        
-        -- Position status in top-right corner of first line
         monitor.setCursorPos(width - #statusText + 1, 1)
         monitor.write(statusText)
         
-        -- Reset everything back to normal
-        monitor.setTextScale(1)
-        monitor.setBackgroundColor(colors.black)
-        monitor.setTextColor(colors.white)
-        
     else
-        -- Draw simple title bar for article view
+        -- Simple title bar for articles
         monitor.setBackgroundColor(colors.gray)
         monitor.setTextColor(colors.white)
         monitor.setCursorPos(1, 1)
         monitor.clearLine()
         
-        -- Truncate title if too long
         local displayTitle = title
         if #displayTitle > width - 10 then
             displayTitle = string.sub(displayTitle, 1, width - 13) .. "..."
         end
         
-        -- Title
         local titlePadding = math.floor((width - #displayTitle) / 2)
         monitor.setCursorPos(titlePadding > 0 and titlePadding or 1, 1)
         monitor.write(displayTitle)
         
-        -- Connection status
         local statusText = serverConnected and "LIVE" or "OFFLINE"
         local statusColor = serverConnected and colors.green or colors.red
         monitor.setTextColor(statusColor)
         monitor.setCursorPos(width - #statusText + 1, 1)
         monitor.write(statusText)
-        
-        -- Reset background
-        monitor.setBackgroundColor(colors.black)
-        monitor.setTextColor(colors.white)
     end
+    
+    -- Always reset to black background and white text
+    monitor.setTextScale(1)
+    monitor.setBackgroundColor(colors.black)
+    monitor.setTextColor(colors.white)
 end
 
 -- Function to draw the list of headlines
 local function drawHeadlines()
+    -- Start fresh
+    monitor.setTextScale(1)
     monitor.setBackgroundColor(colors.black)
     monitor.clear()
-    drawTitleBar(mainTitle, true) -- Use main title styling
     
-    -- Set scale for headlines
+    -- Draw title bar
+    drawTitleBar(mainTitle, true)
+    
+    -- Ensure we're back to normal settings
     monitor.setTextScale(headlineScale)
     monitor.setBackgroundColor(colors.black)
     monitor.setTextColor(colors.white)
@@ -273,36 +271,49 @@ local function drawHeadlines()
         monitor.write("No articles available")
         monitor.setCursorPos(2, y + 1)
         monitor.write("Waiting for news...")
-        monitor.setTextScale(1) -- Reset scale
+        monitor.setTextScale(1)
         return
     end
 
-    for i = headlineScroll + 1, #articles do
-        if y > height then break end
-        monitor.setCursorPos(2, y)
-        monitor.setTextColor(colors.white)
+    -- Draw headlines with wrapping
+    local articleIndex = headlineScroll + 1
+    while articleIndex <= #articles and y <= height do
+        local article = articles[articleIndex]
+        if not article then break end
         
-        -- Show article timestamp if available
-        local article = articles[i]
-        local displayText = tostring(i) .. ". " .. (article.headline or "No headline")
+        -- Create headline text with number and timestamp
+        local headlineText = tostring(articleIndex) .. ". " .. (article.headline or "No headline")
         if article.timestamp then
-            local timeStr = string.sub(article.timestamp, 12, 16) -- Extract time part
-            displayText = displayText .. " (" .. timeStr .. ")"
+            local timeStr = string.sub(article.timestamp, 12, 16)
+            headlineText = headlineText .. " (" .. timeStr .. ")"
         end
         
-        -- Truncate if too long
-        if #displayText > width - 2 then
-            displayText = string.sub(displayText, 1, width - 5) .. "..."
+        -- Wrap the headline text
+        local wrappedLines = wrapText(headlineText, width - 2)
+        
+        -- Draw each line of the wrapped headline
+        for _, line in ipairs(wrappedLines) do
+            if y > height then break end
+            monitor.setCursorPos(2, y)
+            monitor.setTextColor(colors.white)
+            monitor.setBackgroundColor(colors.black)
+            monitor.write(line)
+            y = y + 1
         end
         
-        monitor.write(displayText)
-        y = y + 1
+        -- Add a small gap between headlines if there's room
+        if y <= height then
+            y = y + 1
+        end
+        
+        articleIndex = articleIndex + 1
     end
     
-    -- Show scroll indicator
-    if headlineScroll > 0 or #articles > (height - titleHeight) then
-        monitor.setCursorPos(width, height)
+    -- Show scroll indicator if needed
+    if headlineScroll > 0 or articleIndex <= #articles then
+        monitor.setCursorPos(width - 1, height)
         monitor.setTextColor(colors.yellow)
+        monitor.setBackgroundColor(colors.black)
         monitor.write("^")
     end
     
