@@ -1,11 +1,6 @@
 --[[
-    PoggishTown Times - Improved Client
-    Features:
-    - Works with new server message format
-    - Heartbeat system for connection monitoring
-    - Better error handling and reconnection
-    - Persistent article storage
-    - Improved synchronization
+    PoggishTown Times - Fixed Client
+    Fixed the title display issue with scaling
 ]]
 
 -- --- Configuration ---
@@ -196,8 +191,17 @@ local function drawTitleBar(title, useMainTitle)
         
         -- Set title scale and draw title
         monitor.setTextScale(titleScale)
-        local scaledWidth = math.floor(width / titleScale)
-        local titlePadding = math.max(1, math.floor((scaledWidth - #title) / 2))
+        
+        -- FIXED: Calculate positioning correctly for scaled text
+        -- The actual character width when scaled is width, not width/scale
+        local titlePadding = math.max(1, math.floor((width - (#title * titleScale)) / 2))
+        
+        -- Make sure we don't go off screen
+        if titlePadding < 1 then titlePadding = 1 end
+        if titlePadding + (#title * titleScale) > width then
+            titlePadding = math.max(1, width - (#title * titleScale))
+        end
+        
         monitor.setCursorPos(titlePadding, 1)
         monitor.write(title)
         
@@ -523,6 +527,13 @@ local function run()
     -- Load saved articles
     loadArticles()
     
+    -- Test monitor first
+    print("Testing monitor display...")
+    monitor.clear()
+    monitor.setCursorPos(1, 1)
+    monitor.write("MONITOR TEST - Starting in 3 seconds...")
+    sleep(3)
+    
     -- Start with the headline view
     changeView("headlines")
     
@@ -537,7 +548,7 @@ local function run()
     print("Heartbeat timer started, entering main loop...")
 
     while true do
-        local eventData = {os.pullEvent()} -- REMOVED the timeout - this was the issue!
+        local eventData = {os.pullEvent()}
         local event = eventData[1]
 
         -- Handle rednet messages
